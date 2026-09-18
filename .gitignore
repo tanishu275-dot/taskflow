@@ -6,3 +6,6 @@ dist/
 build/
 .DS_Store
 *.log
+
+/generated/prisma
+server/generated/
