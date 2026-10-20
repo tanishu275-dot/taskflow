@@ -10,7 +10,7 @@ Built to learn the stack properly — not from a tutorial.
 - [x] PostgreSQL via Prisma
 - [x] JWT authentication
 - [x] React frontend
-- [ ] Projects and team members
+- [x] Projects and team members
 - [ ] Deployed
 
 ## Authentication
