@@ -88,19 +88,51 @@ app.post('/api/auth/login', async (req, res) => {
   res.json({ token });
 });
 
+async function isMember(userId, projectId) {
+  const membership = await prisma.membership.findUnique({
+    where: { userId_projectId: { userId, projectId } },
+  });
+  return Boolean(membership);
+}
+
+function visibleToUser(userId) {
+  return {
+    OR: [
+      { userId },
+      { project: { members: { some: { userId } } } },
+    ],
+  };
+}
+
 /* ---------------- tasks ---------------- */
 
 app.get('/api/tasks', requireAuth, async (req, res) => {
+  const { projectId } = req.query;
+
+  const where = visibleToUser(req.userId);
+
+  if (projectId === 'none') {
+    where.projectId = null;
+    where.userId = req.userId;
+  } else if (projectId !== undefined) {
+    const id = Number(projectId);
+    if (!(await isMember(req.userId, id))) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+    where.projectId = id;
+  }
+
   const tasks = await prisma.task.findMany({
-    where: { userId: req.userId },
+    where,
     orderBy: { createdAt: 'asc' },
   });
+
   res.json(tasks);
 });
 
 app.get('/api/tasks/:id', requireAuth, async (req, res) => {
-  const task = await prisma.task.findFirst({
-    where: { id: Number(req.params.id), userId: req.userId },
+    const task = await prisma.task.findFirst({
+    where: { id: Number(req.params.id), ...visibleToUser(req.userId) },
   });
   if (!task) {
     return res.status(404).json({ error: 'Task not found' });
@@ -109,20 +141,34 @@ app.get('/api/tasks/:id', requireAuth, async (req, res) => {
 });
 
 app.post('/api/tasks', requireAuth, async (req, res) => {
-  const { title } = req.body;
+  const { title, projectId } = req.body;
+
   if (!title || title.trim() === '') {
     return res.status(400).json({ error: 'Title is required' });
   }
+
+  if (projectId !== undefined && projectId !== null) {
+    const allowed = await isMember(req.userId, Number(projectId));
+    if (!allowed) {
+      return res.status(404).json({ error: 'Project not found' });
+    }
+  }
+
   const task = await prisma.task.create({
-    data: { title: title.trim(), userId: req.userId },
+    data: {
+      title: title.trim(),
+      userId: req.userId,
+      projectId: projectId ? Number(projectId) : null,
+    },
   });
+
   res.status(201).json(task);
 });
 
 app.patch('/api/tasks/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   const existing = await prisma.task.findFirst({
-    where: { id, userId: req.userId },
+    where: { id, ...visibleToUser(req.userId) },
   });
   if (!existing) {
     return res.status(404).json({ error: 'Task not found' });
@@ -149,8 +195,38 @@ app.delete('/api/tasks/:id', requireAuth, async (req, res) => {
   res.status(204).end();
 });
 
+/* ---------------- projects ---------------- */
+
+app.post('/api/projects', requireAuth, async (req, res) => {
+  const { name } = req.body;
+  if (!name || name.trim() === '') {
+    return res.status(400).json({ error: 'Name is required' });
+  }
+
+  const project = await prisma.project.create({
+    data: {
+      name: name.trim(),
+      members: {
+        create: { userId: req.userId, role: 'owner' },
+      },
+    },
+    include: { members: true },
+  });
+
+  res.status(201).json(project);
+});
+
+app.get('/api/projects', requireAuth, async (req, res) => {
+  const projects = await prisma.project.findMany({
+    where: { members: { some: { userId: req.userId } } },
+    orderBy: { createdAt: 'asc' },
+  });
+  res.json(projects);
+});
+
 /* ---------------- start ---------------- */
 
 app.listen(PORT, () => {
   console.log(`Server listening on http://localhost:${PORT}`);
 });
+
