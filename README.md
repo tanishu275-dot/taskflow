@@ -3,7 +3,7 @@
 A full-stack task manager: React, Node/Express, and PostgreSQL.
 Built to learn the stack properly — not from a tutorial.
 
-**Status:** Phase 4 — Running Locally
+**Status:** Phase 5 — projects, assignments, due dates
 
 ## Planned
 - [x] REST API for tasks

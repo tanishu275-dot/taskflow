@@ -35,8 +35,9 @@ export default function TaskList({ token, onLogout }) {
 
   async function handleToggle(task) {
     try {
-      const updated = await updateTask(token, task.id, { done: !task.done });
-      setTasks(tasks.map((t) => (t.id === updated.id ? updated : t)));
+      const updated = await updateTask(token, task.id, {
+        status: task.status === 'done' ? 'todo' : 'done',
+      });      setTasks(tasks.map((t) => (t.id === updated.id ? updated : t)));
     } catch (err) {
       setError(err.message);
     }
@@ -79,12 +80,10 @@ export default function TaskList({ token, onLogout }) {
           {tasks.map((task) => (
             <li key={task.id} style={{ display: 'flex', gap: 8, alignItems: 'center', padding: '6px 0' }}>
               <input
-                type="checkbox"
-                checked={task.done}
+                checked={task.status === 'done'}
                 onChange={() => handleToggle(task)}
               />
-              <span style={{ flex: 1, textDecoration: task.done ? 'line-through' : 'none' }}>
-                {task.title}
+              <span style={{ flex: 1, textDecoration: task.status === 'done' ? 'line-through' : 'none' }}>                {task.title}
               </span>
               <button onClick={() => handleDelete(task.id)}>×</button>
             </li>
