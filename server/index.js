@@ -131,8 +131,12 @@ app.get('/api/tasks', requireAuth, async (req, res) => {
 });
 
 app.get('/api/tasks/:id', requireAuth, async (req, res) => {
-    const task = await prisma.task.findFirst({
-    where: { id: Number(req.params.id), ...visibleToUser(req.userId) },
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Invalid task id' });
+  }
+  const task = await prisma.task.findFirst({
+    where: { id, ...visibleToUser(req.userId) },
   });
   if (!task) {
     return res.status(404).json({ error: 'Task not found' });
@@ -167,6 +171,9 @@ app.post('/api/tasks', requireAuth, async (req, res) => {
 
 app.patch('/api/tasks/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Invalid task id' });
+  }
   const existing = await prisma.task.findFirst({
     where: { id, ...visibleToUser(req.userId) },
   });
@@ -174,10 +181,44 @@ app.patch('/api/tasks/:id', requireAuth, async (req, res) => {
     return res.status(404).json({ error: 'Task not found' });
   }
 
-  const { title, done } = req.body;
+  const { title, status, dueDate, assigneeId } = req.body;
   const data = {};
+
   if (title !== undefined) data.title = title;
-  if (done !== undefined) data.done = done;
+
+  if (status !== undefined) {
+    if (!['todo', 'doing', 'done'].includes(status)) {
+      return res.status(400).json({ error: 'status must be todo, doing, or done' });
+    }
+    data.status = status;
+  }
+
+  if (dueDate !== undefined) {
+    if (dueDate === null) {
+      data.dueDate = null;
+    } else {
+      const parsed = new Date(dueDate);
+      if (Number.isNaN(parsed.getTime())) {
+        return res.status(400).json({ error: 'dueDate must be a valid date' });
+      }
+      data.dueDate = parsed;
+    }
+  }
+
+  if (assigneeId !== undefined) {
+    if (assigneeId === null) {
+      data.assigneeId = null;
+    } else {
+      if (!existing.projectId) {
+        return res.status(400).json({ error: 'Only project tasks can be assigned' });
+      }
+      const allowed = await isMember(Number(assigneeId), existing.projectId);
+      if (!allowed) {
+        return res.status(400).json({ error: 'Assignee is not a member of this project' });
+      }
+      data.assigneeId = Number(assigneeId);
+    }
+  }
 
   const task = await prisma.task.update({ where: { id }, data });
   res.json(task);
@@ -185,6 +226,9 @@ app.patch('/api/tasks/:id', requireAuth, async (req, res) => {
 
 app.delete('/api/tasks/:id', requireAuth, async (req, res) => {
   const id = Number(req.params.id);
+  if (!Number.isInteger(id)) {
+    return res.status(400).json({ error: 'Invalid task id' });
+  }
   const existing = await prisma.task.findFirst({
     where: { id, userId: req.userId },
   });
