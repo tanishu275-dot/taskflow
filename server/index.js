@@ -107,7 +107,7 @@ function visibleToUser(userId) {
 /* ---------------- tasks ---------------- */
 
 app.get('/api/tasks', requireAuth, async (req, res) => {
-  const { projectId } = req.query;
+  const { projectId, status, assigneeId, overdue, sort } = req.query;
 
   const where = visibleToUser(req.userId);
 
@@ -116,15 +116,52 @@ app.get('/api/tasks', requireAuth, async (req, res) => {
     where.userId = req.userId;
   } else if (projectId !== undefined) {
     const id = Number(projectId);
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ error: 'Invalid projectId' });
+    }
     if (!(await isMember(req.userId, id))) {
       return res.status(404).json({ error: 'Project not found' });
     }
     where.projectId = id;
   }
 
+  if (status !== undefined) {
+    if (!['todo', 'doing', 'done'].includes(status)) {
+      return res.status(400).json({ error: 'status must be todo, doing, or done' });
+    }
+    where.status = status;
+  }
+
+  if (assigneeId === 'me') {
+    where.assigneeId = req.userId;
+  } else if (assigneeId === 'none') {
+    where.assigneeId = null;
+  } else if (assigneeId !== undefined) {
+    const id = Number(assigneeId);
+    if (!Number.isInteger(id)) {
+      return res.status(400).json({ error: 'Invalid assigneeId' });
+    }
+    where.assigneeId = id;
+  }
+
+  if (overdue === 'true') {
+    where.dueDate = { lt: new Date() };
+    if (status === undefined) {
+      where.status = { not: 'done' };
+    }
+  }
+
+  const sortOptions = {
+    created: { createdAt: 'asc' },
+    due: { dueDate: 'asc' },
+    status: { status: 'asc' },
+  };
+  const orderBy = sortOptions[sort] ?? { createdAt: 'asc' };
+
   const tasks = await prisma.task.findMany({
     where,
-    orderBy: { createdAt: 'asc' },
+    orderBy,
+    include: { assignee: { select: { id: true, email: true } } },
   });
 
   res.json(tasks);
